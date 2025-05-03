@@ -1,0 +1,173 @@
+<!-- Javascript analog clock using Scalable Vector Graphics.
+     Started copying http://demosthenes.info/blog/943/An-SVG-Analog-Clock-In-6-Lines-of-JavaScript
+     and enhanced:
+
+     2016-01-27 spooley
+     - back to jsclock (just the clock) again for new union homepage!
+     - remove all size tweaking and tinkering, too
+
+     2015-10-26 spooley
+     - start with 2015-03-28 jsclock.html
+     - shrink clock to left-side of display only, so we can use the right hand side
+       to display basic thermostat status, viz.:
+       - current lounge temp
+       - current target temp
+       - whether boiler is on or off
+     - onclick callbacks to implement:
+       - [boost] button
+       - [cycle current programme Off-Fixed-Timed]
+     - Dynamically adjust sizes so basic thermo info uses the right-hand quarter of
+       the screen and the clock uses min(height, 3/4-width)
+
+     2015-03-28... spooley
+     - Add day/date display, positioned so as not to be obscured by hour or min hands
+     - Optimise updates: don't need to redisplay hour/min/day/date unless changed
+     - Try to resize to fit smallest window dimension (width behaves ok, but why
+       doesn't height work properly with Chrome?!)
+
+     2015-03-15 spooley
+     - mS resolution for a sweep second hand
+     - sweep second hand in < 60 secs, pause at the minute epoch (a la Swiss railway clock)
+     - add a blob on the end of the second hand, and extend it back past the pivot
+     - reduce length of hour hand, to differentiate it more from minute
+     - change colours towards Swiss orignal
+     - Add minute and second markers
+-->
+
+<html>
+  <head>
+    <style>
+      body {
+        margin: 0;
+	overflow: hidden;	/* No scroll bars */
+      }
+      #clock-container { 
+        display: inline-block;
+        position: relative;
+        width: 100vmin;		/* Smaller of viewport width/height */
+        height: 100vmin;	/* ...so clock is square (i.e. round!) */
+	float: left;
+      } 
+      #face { stroke-width: 2px; stroke: #555; fill: #fff; }
+      #hour { stroke-width: 1px; stroke: #000; fill: #000; }
+      #min { stroke-width: 1px; stroke: #333; fill: #000; }
+      #sec { stroke-width: 1px; stroke: #f55; fill: #f55; }
+      #pivot { stroke-width: 1px; stroke: #f55; fill: #fff; }
+    </style>
+    <script>
+        window.resizeTo(800, 800)
+        function r(el, deg) {
+	  // Helper function to rotate an object around the centre of our clock face
+          el.setAttribute('transform', 'rotate('+ deg +' 50 50)')
+        }
+      setInterval(function() {
+	// Called every tick to redraw the clock hands
+	// (Work in mS so we can sweep second hand smoothly)
+        var d = new Date()
+
+	// To go round once in a minute (60,000 mS)...
+        //r(sec, (d.getSeconds() * 1000 + d.getMilliseconds()) * 360 / 60000)  
+
+	// Sweep secs round in 58.5 secs, then pause at top of the minute...
+	var ms = d.getSeconds() * 1000 + d.getMilliseconds()
+	var msDegrees = ms * 360 / 58500   // Sweep speed determined by  denominator
+	if (msDegrees > 360)
+	  msDegrees = 0
+	r(sec, msDegrees)
+
+	// Secs done. Now worry about hour and minute hands...
+
+	var m = d.getMinutes();
+	var h = d.getHours() % 12;
+
+	if ((m == this.last_minute) && (h == this.last_hour)) {
+	  // Same m and h as last time - no need to update h/m/day/date
+	  return;
+	}
+
+	this.last_minute = m;
+	this.last_hour = h;
+
+	// Min and Hour hands are straightforward...
+	var mdeg = 6 * m;		// Angle of minute hand
+	var hdeg = 30 * h + m / 2;	// Angle for hour hand
+        r(min, mdeg)
+        r(hour, hdeg)
+
+	// Calculate where (12, 3, 6 or 9 o'clock) to display the day+date...
+	el = document.getElementById('datebox');
+	if (mdeg >= 60 && mdeg <= 300 && hdeg >= 60 && hdeg <= 300) {
+          // both hands clear of 12 o'clock
+	  el.setAttribute('transform', 'translate(0 0)');
+	}
+	else if ((mdeg <= 120 || mdeg >= 240) && (hdeg <= 120 || hdeg >= 240)) {
+	  // both hands clear of 6 o'clock
+	  el.setAttribute('transform', 'translate(0 52)');
+	}
+	else if ((mdeg <= 60 || mdeg >= 120) && (hdeg <= 60 || hdeg >= 120)) {
+	  // Display at 3 o'clock
+	  el.setAttribute('transform', 'translate(23 26)');
+	}
+	else if ((mdeg <= 240 || mdeg >= 300) && (hdeg <= 240 || hdeg >= 300)) {
+	  // Display at 9 o'clock
+	  el.setAttribute('transform', 'translate(-23 26)');
+	}
+	else {
+	  // This can't happen!
+	  console.log('No free position for h=', h, ' m=', m, ' hdeg=', hdeg, ' mdeg=', mdeg);
+	  // 'hide' our datebox off-screen
+	  el.setAttribute('transform', 'translate(100 100)');
+	}
+
+	// Now update the day+date
+	var daynames = new Array("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat");
+        el = document.getElementById('day');
+        el.textContent = daynames[d.getDay()] + " " + d.getDate();
+
+      }, 100)	// Update period in mS
+      function drawMarkers() {
+	// Create 60 minute markers (initially all at 12 o'clock)
+	var svgns = "http://www.w3.org/2000/svg";
+	for (var m = 0; m < 60; m++) {
+	  var mark = document.createElementNS(svgns, 'rect');
+	  mark.setAttributeNS(null, 'x', 49)
+	  mark.setAttributeNS(null, 'y', 2)
+	  mark.setAttributeNS(null, 'id', "m" + m.toString())
+	  mark.setAttributeNS(null, 'class', 'marker')
+	  if (m % 5 == 0) {	// 5-minute markers
+	    mark.setAttributeNS(null, 'width', 2)
+	    mark.setAttributeNS(null, 'height', 8)
+	  }
+	  else {		// inbetween markers
+	    mark.setAttributeNS(null, 'width', 1)
+	    mark.setAttributeNS(null, 'height', 4)
+	  }
+	  // Now rotate each tick to where it needs to go...
+          mark.setAttributeNS(null, 'transform', 'rotate('+ m*6 +' 50 50)')
+	  document.getElementById('clock').appendChild(mark)
+	}
+      }
+    </script>
+  </head>
+  <body onload="drawMarkers();" id="body">
+    <div id="clock-container">
+      <svg id="clock" viewBox="0 0 100 100">
+          <circle id="face" cx="50" cy="50" r="49"/>
+	<g id="datebox">
+	  <rect x="34" y="18" width="32" height="12" fill="#555" ></rect>
+	  <rect x="35" y="19" width="30" height="10" fill="#ddd" ></rect>
+	  <text x="50" y="27" id="day" text-anchor="middle" font-family="Helvetica" font-weight="bold" font-size="8" fill="black" > --- -- </text>
+	</g>
+        <g id="hands">
+          <rect id="hour" x="47.5" y="17.5" width="5" height="45" />
+          <rect id="min" x="48.5" y="7.5" width="3" height="55" />
+	  <g id="sec">
+            <line x1="50" y1="60" x2="50" y2="19" />
+            <circle cx="50" cy="15" r="4" />
+	  </g>
+	  <circle id="pivot" cx="50" cy="50" r="1" />
+        </g>
+      </svg>
+    </div>
+  </body>
+</html>
